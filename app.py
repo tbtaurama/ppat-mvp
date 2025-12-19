@@ -4,107 +4,99 @@ from docxtpl import DocxTemplate
 import json
 import io
 
-# 1. Konfigurasi Halaman Website
-st.set_page_config(page_title="AI Notaris MVP", page_icon="⚖️")
+# 1. Konfigurasi Halaman
+st.set_page_config(page_title="AI Notaris Pro", page_icon="⚖️", layout="wide")
 
-st.title("⚖️ AI Notaris - Auto Drafting (PDF Support)")
-st.markdown("Upload dokumen (Gambar/PDF), biarkan AI mengisi draf Akta Anda.")
+st.title("⚖️ AI Notaris - Spesialis Akta")
+st.markdown("Sistem pemisah data Penjual & Pembeli otomatis.")
 
-# 2. Sidebar untuk API Key
+# 2. Sidebar Konfigurasi
 with st.sidebar:
-    st.header("Konfigurasi")
+    st.header("🔑 Kunci Akses")
     api_key = st.text_input("Masukkan Gemini API Key", type="password")
     if api_key:
         genai.configure(api_key=api_key)
-    st.info("Tips: Anda bisa upload campuran file (misal: KTP format JPG, Sertifikat format PDF).")
+    
+    st.divider()
+    st.info("💡 **Tips:** Upload file terpisah agar AI tidak bingung mana Penjual dan mana Pembeli.")
 
-# 3. Area Upload File
-col1, col2 = st.columns(2)
-with col1:
-    uploaded_template = st.file_uploader("1. Upload Template Word (.docx)", type="docx")
-with col2:
-    # UPDATE: Menambahkan 'pdf' ke dalam daftar tipe file
-    uploaded_files = st.file_uploader(
-        "2. Upload Dokumen (KTP/Sertifikat/PBB)", 
-        type=["jpg", "jpeg", "png", "pdf"], 
-        accept_multiple_files=True
+# 3. Layout Input (Menggunakan Kolom agar Rapi)
+col_template, col_space = st.columns([1, 1])
+
+with col_template:
+    st.subheader("1. Template Dokumen")
+    uploaded_template = st.file_uploader("Upload File Word (.docx)", type="docx")
+
+st.divider()
+
+st.subheader("2. Upload Dokumen Para Pihak")
+
+# Membuat 3 Kolom untuk Upload Dokumen Terpisah
+col_penjual, col_pembeli, col_aset = st.columns(3)
+
+with col_penjual:
+    st.markdown("### 👤 Pihak PENJUAL")
+    files_penjual = st.file_uploader(
+        "Upload KTP/NPWP Penjual", 
+        type=["jpg", "png", "pdf"], 
+        accept_multiple_files=True,
+        key="upl_penjual"
     )
 
-# 4. Logika Tombol Proses
-if st.button("Proses Dokumen"):
-    # Validasi Input
+with col_pembeli:
+    st.markdown("### 👤 Pihak PEMBELI")
+    files_pembeli = st.file_uploader(
+        "Upload KTP/NPWP Pembeli", 
+        type=["jpg", "png", "pdf"], 
+        accept_multiple_files=True,
+        key="upl_pembeli"
+    )
+
+with col_aset:
+    st.markdown("### 🏠 Dokumen ASET")
+    files_aset = st.file_uploader(
+        "Sertifikat & PBB", 
+        type=["jpg", "png", "pdf"], 
+        accept_multiple_files=True,
+        key="upl_aset"
+    )
+
+# 4. Logic Pemrosesan
+if st.button("🚀 Proses Pembuatan Akta", type="primary"):
+    # Validasi Kelengkapan
     if not api_key:
-        st.error("⚠️ Harap masukkan API Key di sidebar!")
+        st.error("⚠️ API Key belum diisi!")
     elif not uploaded_template:
-        st.error("⚠️ Harap upload Template Word!")
-    elif not uploaded_files:
-        st.error("⚠️ Harap upload minimal 1 dokumen (Gambar atau PDF)!")
+        st.error("⚠️ Template Word belum diupload!")
+    elif not files_penjual:
+        st.error("⚠️ Data PENJUAL wajib ada!")
+    elif not files_pembeli:
+        st.error("⚠️ Data PEMBELI wajib ada!")
+    elif not files_aset:
+        st.error("⚠️ Data ASET (Sertifikat/PBB) wajib ada!")
     else:
-        with st.spinner('Sedang membaca dokumen (termasuk PDF)...'):
+        with st.spinner('Sedang menganalisis dokumen satu per satu...'):
             try:
-                # A. Siapkan Model AI
                 model = genai.GenerativeModel('gemini-1.5-flash')
                 
-                # B. Siapkan Dokumen untuk dikirim ke AI
-                input_parts = []
-                for file in uploaded_files:
-                    # Membaca data file dalam bentuk bytes
-                    file_bytes = file.getvalue()
-                    
-                    # Menambahkan ke list dengan mime_type yang sesuai (image/jpeg atau application/pdf)
-                    input_parts.append({
-                        "mime_type": file.type,
-                        "data": file_bytes
-                    })
-
-                # C. Prompt Instruksi (Perintah untuk AI)
-                prompt = """
-                Anda adalah asisten legal profesional.
-                Tugas: Ekstrak data dari dokumen-dokumen terlampir (bisa berupa gambar atau PDF).
-                Keluarkan output HANYA dalam format JSON valid. Jangan pakai markdown ```json.
+                # --- TEKNIK CONTEXT MARKER ---
+                # Kita akan menyusun list pesan untuk dikirim ke AI
+                # dengan memberi "Label Teks" sebelum gambar, agar AI tahu konteksnya.
                 
-                Gunakan keys persis seperti ini (kosongkan string jika tidak ada/tidak terbaca):
+                request_content = []
+                
+                # A. Instruksi Utama (System Prompt)
+                main_prompt = """
+                BERTINDAKLAH SEBAGAI STAFF NOTARIS PROFESIONAL.
+                
+                TUGAS:
+                Ekstrak data dari dokumen yang saya berikan berurutan di bawah ini.
+                Saya sudah memisahkan mana dokumen PENJUAL, mana PEMBELI, dan mana ASET.
+                
+                OUTPUT JSON HARUS MEMILIKI KEYS BERIKUT (Isi string kosong jika tidak terbaca):
                 {
                   "nama_penjual": "", "nik_penjual": "", "tempat_lahir_penjual": "", "tanggal_lahir_penjual": "", "pekerjaan_penjual": "", "alamat_penjual": "",
                   "nama_pembeli": "", "nik_pembeli": "", "pekerjaan_pembeli": "", "alamat_pembeli": "",
                   "no_sertifikat": "", "jenis_hak": "", "luas_tanah": "", "kelurahan": "", "kecamatan": "", "kabupaten": "",
                   "nop_pbb": "", "njop_total": "", "tahun_pajak": ""
                 }
-                
-                Aturan Format:
-                1. Tanggal format DD-MM-YYYY. 
-                2. Angka (Luas/NJOP) ambil angkanya saja tanpa 'Rp' atau titik/koma pemisah ribuan.
-                3. Jika dokumen buram, tulis "TIDAK TERBACA".
-                """
-                
-                # D. Kirim ke Gemini (Prompt + File)
-                request_content = [prompt] + input_parts
-                response = model.generate_content(request_content)
-                
-                # E. Bersihkan hasil JSON
-                text_result = response.text.replace("```json", "").replace("```", "").strip()
-                data_json = json.loads(text_result)
-                
-                # Tampilkan Preview Data
-                st.success("✅ Ekstraksi Berhasil!")
-                st.write("Preview Data yang akan dimasukkan:")
-                st.json(data_json)
-                
-                # F. Masukkan ke Word (Render Template)
-                doc = DocxTemplate(uploaded_template)
-                doc.render(data_json)
-                
-                # G. Siapkan Download
-                bio = io.BytesIO()
-                doc.save(bio)
-                
-                st.download_button(
-                    label="⬇️ Download Draf Akta (.docx)",
-                    data=bio.getvalue(),
-                    file_name="Hasil_Draf_Akta.docx",
-                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                )
-                
-            except Exception as e:
-                st.error(f"Terjadi kesalahan teknis: {e}")
-                st.warning("Tips: Pastikan PDF tidak dipassword dan API Key benar.")
