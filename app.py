@@ -4,10 +4,24 @@ from google.generativeai.types import HarmCategory, HarmBlockThreshold
 from docxtpl import DocxTemplate
 import json
 import io
+import re  # Import RegEx untuk pencarian pola teks
 
 # 1. Konfigurasi Halaman
 st.set_page_config(page_title="AI Notaris Pro (v2.5)", page_icon="⚖️", layout="wide")
 st.title("⚖️ AI Notaris - Powered by Gemini 2.5")
+
+# --- FUNGSI PEMBERSIH JSON (UPDATE BARU) ---
+def clean_json_output(text):
+    """
+    Fungsi ini mencari kurung kurawal pertama { dan terakhir }
+    untuk membuang teks basa-basi AI.
+    """
+    # Cari pola JSON object {...}
+    match = re.search(r'\{.*\}', text, re.DOTALL)
+    if match:
+        return match.group(0)
+    else:
+        return text # Kembalikan aslinya jika tidak nemu
 
 # 2. Sidebar Konfigurasi
 with st.sidebar:
@@ -63,10 +77,11 @@ if st.button("🚀 Proses Pembuatan Akta", type="primary"):
                 
                 request_content = []
                 
-                # Prompt Instruksi
+                # Prompt Instruksi (Dipertegas)
                 main_prompt = """
-                BERTINDAKLAH SEBAGAI STAFF NOTARIS.
-                Ekstrak data dari dokumen terlampir ke dalam JSON.
+                Tugas: Ekstrak data dokumen ke format JSON.
+                PENTING: JANGAN ADA KALIMAT PEMBUKA ATAU PENUTUP. LANGSUNG BERIKAN JSON.
+                
                 Keys:
                 {
                   "nama_penjual": "", "nik_penjual": "", "tempat_lahir_penjual": "", "tanggal_lahir_penjual": "", "pekerjaan_penjual": "", "alamat_penjual": "",
@@ -74,10 +89,10 @@ if st.button("🚀 Proses Pembuatan Akta", type="primary"):
                   "no_sertifikat": "", "jenis_hak": "", "luas_tanah": "", "kelurahan": "", "kecamatan": "", "kabupaten": "",
                   "nop_pbb": "", "njop_total": "", "tahun_pajak": ""
                 }
+                
                 ATURAN:
-                1. Ambil data Penjual HANYA dari dokumen label 'PENJUAL'.
-                2. Ambil data Pembeli HANYA dari dokumen label 'PEMBELI'.
-                3. Tanggal format DD-MM-YYYY. Angka tanpa Rp/Titik.
+                1. Penjual dari dokumen 'PENJUAL'. Pembeli dari 'PEMBELI'.
+                2. Tanggal format DD-MM-YYYY.
                 """
                 request_content.append(main_prompt)
 
@@ -94,7 +109,7 @@ if st.button("🚀 Proses Pembuatan Akta", type="primary"):
                 for f in files_aset:
                     request_content.append({'mime_type': f.type, 'data': f.getvalue()})
 
-                # --- SETTING ANTI BLOKIR (SAFETY SETTINGS) ---
+                # Safety Settings
                 safety_settings = {
                     HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
                     HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
@@ -102,13 +117,15 @@ if st.button("🚀 Proses Pembuatan Akta", type="primary"):
                     HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
                 }
 
-                # Kirim Request dengan Safety Settings
+                # Kirim Request
                 response = model.generate_content(request_content, safety_settings=safety_settings)
                 
-                # --- ERROR HANDLING KHUSUS ---
                 try:
-                    text_result = response.text.replace("```json", "").replace("```", "").strip()
-                    data_json = json.loads(text_result)
+                    # --- LANGKAH PEMBERSIHAN ---
+                    raw_text = response.text
+                    clean_text = clean_json_output(raw_text) # Panggil fungsi pembersih
+                    
+                    data_json = json.loads(clean_text)
                     
                     st.success("✅ Analisis Selesai!")
                     with st.expander("Lihat Hasil Bacaan AI"):
@@ -129,11 +146,8 @@ if st.button("🚀 Proses Pembuatan Akta", type="primary"):
                     )
 
                 except ValueError:
-                    # Jika response kosong atau diblokir
-                    st.error("⚠️ Gagal membaca respon dari AI.")
-                    st.warning("Kemungkinan penyebab: Dokumen buram atau AI menolak karena alasan keamanan.")
-                    st.write("Isi Feedback AI:", response.prompt_feedback)
-                    st.write("Isi Respon Mentah:", response.text if hasattr(response, 'text') else "KOSONG")
+                    st.error("⚠️ Format data AI tidak valid.")
+                    st.write("Respon Mentah:", response.text)
 
             except Exception as e:
                 st.error(f"Terjadi kesalahan teknis: {e}")
