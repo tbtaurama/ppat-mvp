@@ -5,30 +5,23 @@ import json
 import io
 
 # 1. Konfigurasi Halaman
-st.set_page_config(page_title="AI Notaris Pro", page_icon="⚖️", layout="wide")
-st.title("⚖️ AI Notaris - Spesialis Akta")
+st.set_page_config(page_title="AI Notaris Pro (v2.5)", page_icon="⚖️", layout="wide")
+st.title("⚖️ AI Notaris - Powered by Gemini 2.5")
 
 # 2. Sidebar Konfigurasi
 with st.sidebar:
     st.header("🔑 Kunci Akses")
     api_key = st.text_input("Masukkan Gemini API Key", type="password")
     
-    # --- FITUR DIAGNOSA (BARU) ---
+    # --- FITUR DIAGNOSA ---
     st.divider()
-    st.markdown("### 🛠️ Menu Darurat")
-    if st.button("Cek Koneksi & Daftar Model"):
+    if st.button("Cek Koneksi"):
         if not api_key:
             st.error("Masukkan API Key dulu!")
         else:
             try:
                 genai.configure(api_key=api_key)
-                st.write("Mencoba menghubungi Google...")
-                list_model = []
-                for m in genai.list_models():
-                    if 'generateContent' in m.supported_generation_methods:
-                        list_model.append(m.name)
-                st.success("Koneksi Berhasil! Model yang tersedia:")
-                st.code(list_model)
+                st.success("Koneksi Aman! Siap memproses.")
             except Exception as e:
                 st.error(f"Koneksi Gagal: {e}")
 
@@ -68,11 +61,11 @@ if st.button("🚀 Proses Pembuatan Akta", type="primary"):
     elif not (files_penjual and files_pembeli and files_aset):
         st.error("⚠️ Semua dokumen (Penjual, Pembeli, Aset) wajib diisi!")
     else:
-        with st.spinner('Sedang menganalisis dokumen...'):
+        with st.spinner('Sedang menganalisis dokumen dengan Gemini 2.5 Flash...'):
             try:
-                # --- UPDATE PENTING DISINI: NAMA MODEL DIGANTI ---
-                # Menggunakan versi spesifik '001' yang lebih stabil
-                model = genai.GenerativeModel('gemini-1.5-flash-001')
+                # --- PEMBARUAN DISINI ---
+                # Kita menggunakan model yang TERSEDIA di akun Anda
+                model = genai.GenerativeModel('models/gemini-2.5-flash')
                 
                 request_content = []
                 
@@ -123,12 +116,10 @@ if st.button("🚀 Proses Pembuatan Akta", type="primary"):
                 st.download_button(
                     label="⬇️ Download Akta (.docx)",
                     data=bio.getvalue(),
-                    file_name="Akta_Final.docx",
+                    file_name="Akta_Final_v2.docx",
                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                     type="primary"
                 )
                 
             except Exception as e:
                 st.error(f"Terjadi kesalahan: {e}")
-                st.markdown("---")
-                st.warning("Jika error '404 not found', coba klik tombol 'Cek Koneksi' di sidebar untuk melihat nama model yang benar.")
