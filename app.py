@@ -77,7 +77,7 @@ if st.button("🚀 Proses Pembuatan Akta", type="primary"):
     else:
         with st.spinner('Sedang menganalisis dokumen satu per satu...'):
             try:
-                model = genai.GenerativeModel('gemini-1.5-flash')
+                model = genai.GenerativeModel('gemini-1.5-flash-latest')
                 
                 # --- TEKNIK CONTEXT MARKER ---
                 # Kita akan menyusun list pesan untuk dikirim ke AI
