@@ -100,3 +100,58 @@ if st.button("🚀 Proses Pembuatan Akta", type="primary"):
                   "no_sertifikat": "", "jenis_hak": "", "luas_tanah": "", "kelurahan": "", "kecamatan": "", "kabupaten": "",
                   "nop_pbb": "", "njop_total": "", "tahun_pajak": ""
                 }
+                
+                ATURAN KHUSUS:
+                1. Ambil data Penjual HANYA dari dokumen di bawah label '--- DOKUMEN PENJUAL ---'.
+                2. Ambil data Pembeli HANYA dari dokumen di bawah label '--- DOKUMEN PEMBELI ---'.
+                3. Format Tanggal: DD-MM-YYYY.
+                4. Angka Luas/Rupiah: Hanya angka (contoh: 1500000), tanpa titik/koma.
+                """
+                request_content.append(main_prompt)
+
+                # B. Masukkan Dokumen Penjual dengan Marker
+                request_content.append("\n\n--- DOKUMEN PENJUAL (PIHAK PERTAMA) ---\n")
+                for f in files_penjual:
+                    request_content.append({'mime_type': f.type, 'data': f.getvalue()})
+
+                # C. Masukkan Dokumen Pembeli dengan Marker
+                request_content.append("\n\n--- DOKUMEN PEMBELI (PIHAK KEDUA) ---\n")
+                for f in files_pembeli:
+                    request_content.append({'mime_type': f.type, 'data': f.getvalue()})
+
+                # D. Masukkan Dokumen Aset dengan Marker
+                request_content.append("\n\n--- DOKUMEN ASET (SERTIFIKAT & PBB) ---\n")
+                for f in files_aset:
+                    request_content.append({'mime_type': f.type, 'data': f.getvalue()})
+
+                # E. Eksekusi AI
+                response = model.generate_content(request_content)
+                
+                # F. Parsing JSON
+                text_result = response.text.replace("```json", "").replace("```", "").strip()
+                data_json = json.loads(text_result)
+                
+                # Tampilkan Hasil
+                st.success("✅ Analisis Selesai!")
+                
+                with st.expander("🔍 Lihat Detail Data Terbaca (Klik disini)"):
+                    st.json(data_json)
+                
+                # G. Render Word
+                doc = DocxTemplate(uploaded_template)
+                doc.render(data_json)
+                
+                bio = io.BytesIO()
+                doc.save(bio)
+                
+                st.download_button(
+                    label="⬇️ Download Akta Siap Print (.docx)",
+                    data=bio.getvalue(),
+                    file_name="Akta_Final.docx",
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    type="primary"
+                )
+                
+            except Exception as e:
+                st.error(f"Terjadi kesalahan: {e}")
+                st.warning("Coba refresh halaman atau cek API Key Anda.")
